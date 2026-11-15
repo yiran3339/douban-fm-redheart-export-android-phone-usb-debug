@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hierarchy rotation="0">
+  <node package="com.douban.radio" content-desc="我喜欢" clickable="false" long-clickable="false" />
+  <node package="com.douban.radio" content-desc="歌曲&#10;第 1 个标签，共 4 个" clickable="true" long-clickable="false" />
+  <node package="com.douban.radio" content-desc="3035首" clickable="false" long-clickable="false" />
+  <node package="com.douban.radio" content-desc="添加到&#10;下载&#10;删除" clickable="false" long-clickable="false" />
+  <node package="com.douban.radio" content-desc="历历万乡D&#8203;e&#8203;m&#8203;o&#8203;&#10;陈粒" clickable="true" long-clickable="true" bounds="[0,693][1080,911]" />
+  <node package="com.douban.radio" content-desc="A&#8203; &#8203;Dead Leaf Dance&#10;As The Stars Fall" clickable="true" long-clickable="true" bounds="[0,911][1080,1130]" />
+  <node package="com.douban.radio" content-desc="残酷な天使のテーゼ&#10;Naorchestra" clickable="true" long-clickable="true" bounds="[0,0][0,0]" />
+  <node package="com.douban.radio" content-desc="NEXT SONG" clickable="false" long-clickable="false" />
+</hierarchy>

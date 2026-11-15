@@ -16,11 +16,11 @@
 | 条件 | 说明 |
 |---|---|
 | 一台安卓手机（或安卓模拟器） | 能登录豆瓣FM，且**红心列表里确实有歌**（登录后先肉眼确认非空；2023 年停运换酷我运营，部分老账号历史红心可能未迁移而丢失） |
-| 一台电脑（Win / macOS / Linux） | 已安装 `platform-tools`（含 `adb`）；本仓库脚本在 Windows PowerShell 下验证 |
+| 一台电脑（Win / macOS / Linux） | 已安装 `platform-tools`（含 `adb`）；Windows 用 PowerShell，macOS 用 Python 3 |
 | USB 数据线（非纯充电线） | 真机路径必需；模拟器可走本地 adb |
 | 开发者选项 + USB 调试 | `adb devices` 能看到设备且状态为 `device` |
 | **MIUI / 部分定制系统：额外开启「USB 调试（安全设置）」** | 否则 `adb shell input swipe` 会被系统拦截、界面不滚动（报 `INJECT_EVENTS` 错误） |
-| Python 3 | 用于清洗去重脚本 |
+| Python 3 | macOS 抓取脚本和清洗去重脚本均使用 Python 标准库 |
 
 ### 必备硬件
 - 安卓设备 1 台（真机推荐屏幕大的，如平板；或 Windows 上的雷电 / MuMu / BlueStacks 模拟器）
@@ -38,7 +38,7 @@
 - **MIUI 拦截注入事件**：报 `SecurityException: Injecting to another application requires INJECT_EVENTS permission` → 设置 → 更多设置 → 开发者选项 → 开启「USB 调试（安全设置）」（普通「USB 调试」不够；该项灰色时先登录小米账号、等几分钟、部分机型需插 SIM 卡）。
 - **设备中途掉线** `no devices/emulators found` → 重插 USB / 换线 / 通知栏 USB 用途改「传输文件 (MTP)」/ 撤销并重新授权 USB 调试。
 - **中文乱码**：务必用 `adb pull` 落地 + UTF-8 读取，不要用 `adb exec-out cat` + 正则（GBK 会毁中文）。
-- **数量差额非漏抓**：App 顶部 `N首`（如 3035）通常是「歌曲 / 专辑 / 歌单 / 视频」四标签合计，实际「歌曲」红心往往少于该数（实测约 2700）。
+- **数量核对**：App 的 `N首` 可能包含「歌曲 / 专辑 / 歌单 / 视频」等收藏，不能单独用它判定漏抓。应检查列表确实到底、连续多屏无新增，并核对最后一首；相同歌名与歌手也会去重。
 - **外文 / 日韩歌切分不可靠**：App 把「歌名 歌手」压进同一个 `content-desc` 节点，外文歌无法靠空格 100% 切准 → 这类歌整串存歌名、歌手留空，绝不乱切（原始串另存备份可回溯）。
 
 ---
@@ -66,10 +66,38 @@ adb devices   # 必须看到一行 "<序列号>  device"
    ```
    产出 `douban_fm_redheart_dedup.csv`（歌名,歌手，UTF-8-sig，Excel 直开不乱码）。
 
+### macOS（Apple Silicon / Intel）
+
+安装 Python 3 和 Android platform-tools，并确认手机授权：
+
+```bash
+brew install android-platform-tools python
+adb devices -l                 # 状态应为 device，而非 unauthorized
+python3 --version
+```
+
+如果已用其他方式安装 ADB，可把可执行文件路径传给 `--adb`。在手机上打开「我的 → 喜欢 → 歌曲」，滑到最顶并保持亮屏。先进行三次滑动的试抓，使用独立前缀避免覆盖正式文件：
+
+```bash
+python3 scripts/capture_redheart.py --max-swipes 3 --prefix trial_redheart
+```
+
+确认每屏有新增、CSV 的歌名和歌手正常后，重新进入歌曲列表顶部，运行全量抓取：
+
+```bash
+python3 scripts/capture_redheart.py
+python3 scripts/clean_dedup.py douban_fm_redheart_raw.txt douban_fm_redheart_dedup.csv
+```
+
+多台设备同时连接时，先运行 `adb devices -l`，再加 `--serial <序列号>`。脚本每屏原子保存 `douban_fm_redheart.checkpoint.json`；中断后把列表滑回顶部，再用 `--resume` 重新扫描到断点并继续。已有导出文件时，脚本会拒绝直接覆盖；确认需要重抓时使用 `--overwrite`。可用 `--max-swipes`、`--stable-stop` 调整上限和到底判定。
+
+macOS 脚本从 UI 节点中的换行直接读取歌名和歌手，生成与 Windows 脚本同名的 CSV 和原始 TXT。清洗去重仍使用原有的 `clean_dedup.py`。原始 TXT 保留合并文字以便回溯；该清洗脚本对外文歌采取保守策略，去重 CSV 的外文歌手列可能为空，直接抓取的 CSV 则保留可辨认的歌手。
+
 ---
 
 ## 📁 文件说明
 - `scripts/capture_redheart.ps1` — ADB 自动滚屏抓取脚本（屏幕自适应滑动坐标）
+- `scripts/capture_redheart.py` — macOS 原生 Python 抓取脚本（设备检查、断点恢复、防覆盖）
 - `scripts/clean_dedup.py` — 清洗 + 去重（剥离零宽空格 U+200B 等、按「歌名 + 歌手」去重，保留不同版本）
 - `SKILL.md` — 给 AI Agent 用的技能说明（含完整前置 / 硬件 / 隐私 / 操作风险 / 流程）
 - `README.md` — 本文档

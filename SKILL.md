@@ -1,9 +1,9 @@
 ---
 name: douban-fm-redheart-export
-description: Export the "红心/我喜欢" (red-heart) song list from Douban FM (com.douban.radio, kuwo-operated) to a local CSV via ADB UI scraping, then clean and de-duplicate. Use when a user wants to back up / download / export their Douban FM liked songs to local files. The app has NO official export; this is the only working path.
+description: Export the "红心/我喜欢" (red-heart) song list from Douban FM (com.douban.radio, kuwo-operated) to a local CSV via ADB UI scraping, then clean and de-duplicate. Use when a user wants to back up / download / export their Douban FM liked songs to local files. Supports Windows PowerShell and native macOS Python.
 description_zh: "把豆瓣FM红心歌单通过ADB抓取导出为本地CSV并清洗去重"
 description_en: "Export Douban FM red-heart list to local CSV via ADB scraping, then clean & dedup"
-version: 1.0.0
+version: 1.1.0
 allowed-tools: Bash,Read,Write,Edit
 metadata:
   agent_created: true
@@ -40,7 +40,7 @@ App **没有任何官方导出功能**，本 skill 是目前唯一验证可用�
 3. 设备与电脑通过 **USB 数据线**（非纯充电线）连接，或模拟器本地 adb。
 4. 设备已开启**开发者选项 + USB 调试**，`adb devices` 能看到设备且状态为 `device`（非 `unauthorized`/空）。
 5. **MIUI/部分定制系统必须额外开启「USB调试（安全设置）」**（见下方"操作风险"），否则 `input swipe` 会被系统拦截、界面不滚动。
-6. 电脑装有 `python3`（用于清洗去重脚本）。
+6. 电脑装有 `python3`（macOS 抓取及所有平台清洗去重均需要）。
 
 ## 必备硬件条件 (Hardware)
 - 安卓设备 1 台（真机推荐屏幕大的，如平板；或 Windows 上的雷电/MuMu/BlueStacks 模拟器）。
@@ -58,8 +58,8 @@ App **没有任何官方导出功能**，本 skill 是目前唯一验证可用�
 - **设备中途掉线**：出现 `no devices/emulators found` → 重插 USB / 换口换线 / 通知栏 USB 用途改「传输文件(MTP)」/ 撤销并重新授权 USB 调试。
 - **中文乱码**：**禁止** `adb exec-out cat` + PowerShell 正则（GBK 会毁中文），**禁止**只用 `Get-Content`（易读到空/旧文件）。必须 `adb pull` 落地 + `ReadAllText(...,UTF8)` + `[xml]` 解析。
 - **数据污染（已在脚本中规避）**：`uiautomator dump` 每次向 stdout 输出 `UI hierchary dumped to:...`，须 `>$null 2>$null` 丢弃并加入 garbage 过滤，否则污染数据、撑大行数。
-- **外文/日韩歌切分不可靠**：App 把"歌名 歌手"压进同一个 `content-desc` 节点，外文歌无法靠空格 100% 切准 → 本 skill 对非中文开头的歌**整串存歌名、歌手留空**，绝不乱切；原始串另存备份可回溯。
-- **数量差额非漏抓**：App 顶部显示的 `N首`（如 3035）通常是「歌曲/专辑/歌单/视频」四标签合计；实际"歌曲"红心往往少于该数（实测约 2700）。
+- **外文/日韩歌切分**：部分版本的 App 在 `content-desc` 内以换行分隔歌名和歌手，macOS 脚本会直接使用这个分隔；若只有合并文字，脚本沿用原 PowerShell 切分规则。原有 `clean_dedup.py` 对外文仍保守地将整串存为歌名、歌手留空；保留原始 TXT 可回溯。
+- **数量核对**：App 的 `N首` 可能包含「歌曲/专辑/歌单/视频」等收藏。以实际滚动到底、连续多屏无新增及最后一首核对为准；相同歌名与歌手也会去重。
 
 ---
 
@@ -72,6 +72,13 @@ winget install Google.PlatformTools
 # 或官网 ZIP: https://developer.android.com/tools/releases/platform-tools 解压后加入 PATH
 adb devices   # 必须看到一行 "<序列号>  device"
 ```
+macOS（Apple Silicon / Intel）：
+```bash
+brew install android-platform-tools python
+adb devices -l
+python3 --version
+```
+也可使用已安装的 ADB，并在 macOS 脚本中传入 `--adb <完整路径>`。
 真机：开发者选项开 USB 调试 + 「USB调试（安全设置）」，手机弹窗点"一律允许"。
 模拟器：启动后 `adb connect 127.0.0.1:5555`（雷电/BlueStacks）或 `:7555`（MuMu）。
 
@@ -80,16 +87,21 @@ adb devices   # 必须看到一行 "<序列号>  device"
 先肉眼确认红心里**有歌**（顶部会显示 `N首`），否则无数据可抓。
 
 ### 步骤 3 — 先验证再全量（避免白跑）
-把抓取脚本里 `$maxSwipes` 临时改成 `3` 跑一次，看输出：
+Windows：把 PowerShell 脚本里 `$maxSwipes` 临时改成 `3`。macOS：运行 `python3 {baseDir}/scripts/capture_redheart.py --max-swipes 3 --prefix trial_redheart`。看输出：
 - 无 `UI hierchary` 字样、每屏"新增"在涨、样例是干净的歌名 → OK；
 - 每屏"新增"一直 0 或界面不动 → 多半是「USB调试（安全设置）」没开，见操作风险。
 
 ### 步骤 4 — 全量抓取
-`$maxSwipes` 改回 `1000`，在**电脑**上运行（PowerShell）：
+Windows：`$maxSwipes` 改回 `1000`，在电脑上运行：
 ```powershell
 powershell -ExecutionPolicy Bypass -File {baseDir}/scripts/capture_redheart.ps1
 ```
 或直接把脚本内容粘进 PowerShell 窗口运行（避开执行策略）。
+macOS：重新进入歌曲列表顶部，在电脑上运行：
+```bash
+python3 {baseDir}/scripts/capture_redheart.py
+```
+可用 `--adb <路径>` 指定 ADB，`--serial <序列号>` 选择设备，`--max-swipes` 和 `--stable-stop` 调整抓取。已有输出或断点时默认拒绝覆盖。中断后先把手机列表滑回顶部，再用 `--resume`；明确重抓用 `--overwrite`。每屏原子保存 `.checkpoint.json`，避免中断丢失已抓数据。
 产出：`douban_fm_redheart.csv`（歌名,歌手）+ `douban_fm_redheart_raw.txt`（原始串备份，防切错可回溯）。
 到底自动停（连续 30 屏无新增）。
 
@@ -108,7 +120,7 @@ python3 {baseDir}/scripts/clean_dedup.py <raw_txt路径> <输出csv路径>
 ---
 
 ## 关键技术备忘 (Key gotchas — do not rediscover)
-- 歌曲信息在 `content-desc` 节点，**每首歌一个节点、"歌名 歌手"已合并**，不是两个节点成对。
+- 歌曲信息在 `content-desc` 节点，每首歌一个可点击且可长按的节点。当前 Android 版本节点内的歌名和歌手由换行分隔；不要将它们误当成两个歌曲节点。
 - 切分规则：首词含汉字 → 第一个空格切；拉丁/数字开头 → 最后一个空格切（本 skill 对外文更保守，整串存歌名、歌手留空）。
 - garbage 过滤白名单：`我喜欢/歌曲/专辑/歌单/视频/添加到/下载/删除/N首/第N个标签/共N个/NEXT SONG/暂无歌曲/UI hierchary dumped`。
 - 滑动坐标屏幕自适应：`wm size` 取 w/h，从 h*0.7 滑到 h*0.3，duration 400，每屏间隔 ~1s。

@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+
+# Personal exports and live-device diagnostics
+/douban_fm_redheart*
+/trial_redheart*
+/capture.log
+/capture_redheart.py
+/window_*.xml
+/douban_*.png
+/.douban_redheart_ui.xml
+/comparison/
