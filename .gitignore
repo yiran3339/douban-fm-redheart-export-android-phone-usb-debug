@@ -2,6 +2,12 @@ __pycache__/
 *.pyc
 
 # Personal exports and live-device diagnostics
+# Catch custom --prefix names as well as the default export name.
+/*.csv
+/*_raw.txt
+/*.checkpoint.json
+/*.jsonl
+/*.log
 /douban_fm_redheart*
 /trial_redheart*
 /capture.log
